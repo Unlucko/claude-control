@@ -188,41 +188,56 @@ export default function TerminalTile({ sessionId, isFocused }: Props) {
       {/* terminal */}
       <div ref={termRef} style={{ flex: 1, overflow: 'hidden' }} />
 
-      {/* quick action buttons */}
+      {/* mobile virtual keyboard - retro CLI style */}
       {isActive && (
-        <div style={{
-          display: 'flex',
-          borderTop: '1px solid #222',
-          flexShrink: 0,
-          overflow: 'auto',
-        }}>
-          {[
-            { label: 'y', value: 'y\n' },
-            { label: 'n', value: 'n\n' },
-            { label: '1', value: '1\n' },
-            { label: '2', value: '2\n' },
-            { label: '3', value: '3\n' },
-            { label: 'Enter', value: '\r' },
-            { label: 'Esc', value: '\x1b' },
-            { label: 'Tab', value: '\t' },
-            { label: 'Ctrl+C', value: '\x03' },
-          ].map(btn => (
-            <button
-              key={btn.label}
-              onClick={(e) => { e.stopPropagation(); sendInput(sessionId, btn.value); }}
-              style={{
-                flex: 1,
-                border: 'none',
-                borderRight: '1px solid #222',
-                fontSize: 10,
-                padding: '6px 0',
-                color: '#888',
-                minWidth: 0,
-              }}
-            >
-              {btn.label}
-            </button>
-          ))}
+        <div style={{ flexShrink: 0, background: '#000', borderTop: '1px solid #333' }}>
+          <div style={{ display: 'flex' }}>
+            {[
+              { label: 'ESC', value: '\x1b' },
+              { label: 'TAB', value: '\t' },
+              { label: '^C', value: '\x03' },
+              { label: '\u25b2', value: '\x1b[A' },
+              { label: '\u25bc', value: '\x1b[B' },
+              { label: 'RET', value: '\r' },
+            ].map(btn => (
+              <button
+                key={btn.label}
+                onClick={(e) => { e.stopPropagation(); sendInput(sessionId, btn.value); }}
+                style={{
+                  flex: 1, border: 'none', borderRight: '1px solid #1a1a1a',
+                  fontFamily: "'Menlo', monospace", fontSize: 11, padding: '10px 0',
+                  color: '#30d158', background: '#000', minWidth: 0,
+                  letterSpacing: 1, textTransform: 'uppercase',
+                }}
+              >
+                {btn.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', borderTop: '1px solid #1a1a1a' }}>
+            {[
+              { label: '[y]', value: 'y\n' },
+              { label: '[n]', value: 'n\n' },
+              { label: '[1]', value: '1\n' },
+              { label: '[2]', value: '2\n' },
+              { label: '[3]', value: '3\n' },
+              { label: '/', value: '/' },
+              { label: '~', value: '~' },
+              { label: '|', value: '|' },
+            ].map(btn => (
+              <button
+                key={btn.label}
+                onClick={(e) => { e.stopPropagation(); sendInput(sessionId, btn.value); }}
+                style={{
+                  flex: 1, border: 'none', borderRight: '1px solid #1a1a1a',
+                  fontFamily: "'Menlo', monospace", fontSize: 11, padding: '10px 0',
+                  color: '#666', background: '#000', minWidth: 0,
+                }}
+              >
+                {btn.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

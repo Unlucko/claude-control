@@ -1,42 +1,24 @@
 #!/usr/bin/env node
 
-// cc — CLI client for claude-control
-// Creates a session and connects your terminal to it via WebSocket.
-// Usage: cc [claude|terminal] [--cwd <path>] [--resume <id>] [--agent <preset>]
+// cc -- CLI client for claude-control
+// Usage: cc [claude|terminal]  cc list  cc attach <id>  cc kill <id>  cc kill-all  cc --help
 
 const https = require('https');
 const { WebSocket } = require('ws');
 const { resolve } = require('path');
-const os = require('os');
 
-// Config
 const TOKEN = process.env.CC_TOKEN || process.env.CONTROL_TOKEN;
 const HOST = process.env.CC_HOST || 'localhost';
 const PORT = process.env.CC_PORT || '4000';
 const BASE = `https://${HOST}:${PORT}`;
 const WS_URL = `wss://${HOST}:${PORT}/ws?token=${TOKEN}`;
 
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 if (!TOKEN) {
   process.stderr.write('Error: set CC_TOKEN or CONTROL_TOKEN env var\n');
   process.exit(1);
 }
-
-// Parse args
-const args = process.argv.slice(2);
-let type = 'claude';
-let cwd = process.cwd();
-let resumeSessionId = undefined;
-let agent = undefined;
-
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === '--cwd' && args[i + 1]) { cwd = resolve(args[++i]); continue; }
-  if (args[i] === '--resume' && args[i + 1]) { resumeSessionId = args[++i]; continue; }
-  if (args[i] === '--agent' && args[i + 1]) { agent = args[++i]; continue; }
-  if (args[i] === 'terminal' || args[i] === 'claude') { type = args[i]; continue; }
-}
-
-// Ignore self-signed certs
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 function apiRequest(method, path, body) {
   return new Promise((resolve, reject) => {
@@ -50,12 +32,12 @@ function apiRequest(method, path, body) {
         'Authorization': `Bearer ${TOKEN}`,
         'Content-Type': 'application/json',
       },
-      rejectAuthorized: false,
     };
     const req = https.request(opts, (res) => {
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
+        if (res.statusCode === 204) return resolve(null);
         try { resolve(JSON.parse(data)); } catch { resolve(data); }
       });
     });
@@ -65,65 +47,32 @@ function apiRequest(method, path, body) {
   });
 }
 
-async function main() {
-  // Create session
-  const session = await apiRequest('POST', '/api/sessions', {
-    type,
-    name: type === 'terminal' ? 'terminal' : `claude:${cwd.split('/').pop()}`,
-    cwd,
-    agent,
-    claudeSessionId: resumeSessionId,
-  });
-
-  if (session.error) {
-    process.stderr.write(`Error: ${session.error}\n`);
-    process.exit(1);
-  }
-
-  process.stderr.write(`Session ${session.id} created (${type}, pid ${session.pid})\n`);
-
-  // Connect WebSocket
+function connectSession(sessionId) {
   const ws = new WebSocket(WS_URL, { rejectUnauthorized: false });
 
   ws.on('open', () => {
-    // Subscribe to session
-    ws.send(JSON.stringify({ type: 'subscribe', sessionId: session.id }));
-
-    // Send terminal size
+    ws.send(JSON.stringify({ type: 'subscribe', sessionId }));
     const { columns: cols, rows } = process.stdout;
-    ws.send(JSON.stringify({ type: 'resize', sessionId: session.id, cols, rows }));
+    ws.send(JSON.stringify({ type: 'resize', sessionId, cols, rows }));
 
-    // Raw mode - pass stdin directly to PTY
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(true);
-    }
+    if (process.stdin.isTTY) process.stdin.setRawMode(true);
     process.stdin.resume();
     process.stdin.on('data', (data) => {
-      ws.send(JSON.stringify({ type: 'input', sessionId: session.id, data: data.toString() }));
+      ws.send(JSON.stringify({ type: 'input', sessionId, data: data.toString() }));
     });
 
-    // Handle terminal resize
     process.stdout.on('resize', () => {
       const { columns: cols, rows } = process.stdout;
-      ws.send(JSON.stringify({ type: 'resize', sessionId: session.id, cols, rows }));
+      ws.send(JSON.stringify({ type: 'resize', sessionId, cols, rows }));
     });
   });
 
   ws.on('message', (raw) => {
     const msg = JSON.parse(raw.toString());
-    switch (msg.type) {
-      case 'data':
-      case 'scrollback':
-        if (msg.sessionId === session.id) {
-          process.stdout.write(msg.data);
-        }
-        break;
-      case 'session_exit':
-        if (msg.sessionId === session.id) {
-          cleanup();
-        }
-        break;
+    if ((msg.type === 'data' || msg.type === 'scrollback') && msg.sessionId === sessionId) {
+      process.stdout.write(msg.data);
     }
+    if (msg.type === 'session_exit' && msg.sessionId === sessionId) cleanup();
   });
 
   ws.on('close', () => cleanup());
@@ -133,19 +82,153 @@ async function main() {
   });
 
   function cleanup() {
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(false);
-    }
+    if (process.stdin.isTTY) process.stdin.setRawMode(false);
     process.exit(0);
   }
 
-  // Ctrl+C should go to the remote PTY, not kill this process
-  // Raw mode handles this, but just in case:
   process.on('SIGINT', () => {});
   process.on('SIGTERM', () => cleanup());
 }
 
-main().catch((err) => {
-  process.stderr.write(`Error: ${err.message}\n`);
+async function findSession(query) {
+  const sessions = await apiRequest('GET', '/api/sessions');
+  if (!Array.isArray(sessions) || sessions.length === 0) {
+    process.stderr.write('No sessions found\n');
+    process.exit(1);
+  }
+
+  // exact ID match
+  const exact = sessions.find(s => s.id === query);
+  if (exact) return exact;
+
+  // partial ID match
+  const partialId = sessions.filter(s => s.id.startsWith(query));
+  if (partialId.length === 1) return partialId[0];
+  if (partialId.length > 1) {
+    process.stderr.write(`Ambiguous ID "${query}" matches ${partialId.length} sessions\n`);
+    process.exit(1);
+  }
+
+  // name match
+  const nameMatch = sessions.filter(s => s.name.includes(query));
+  if (nameMatch.length === 1) return nameMatch[0];
+  if (nameMatch.length > 1) {
+    process.stderr.write(`Ambiguous name "${query}" matches ${nameMatch.length} sessions\n`);
+    process.exit(1);
+  }
+
+  process.stderr.write(`No session matching "${query}"\n`);
   process.exit(1);
-});
+}
+
+// --- Commands ---
+
+async function cmdList() {
+  const sessions = await apiRequest('GET', '/api/sessions');
+  if (!Array.isArray(sessions) || sessions.length === 0) {
+    process.stdout.write('No sessions\n');
+    return;
+  }
+  const pad = (s, n) => String(s).padEnd(n);
+  process.stdout.write(`${pad('ID', 10)} ${pad('NAME', 20)} ${pad('STATUS', 8)} ${pad('TMUX', 15)} ${pad('TYPE', 8)}\n`);
+  process.stdout.write(`${'-'.repeat(10)} ${'-'.repeat(20)} ${'-'.repeat(8)} ${'-'.repeat(15)} ${'-'.repeat(8)}\n`);
+  for (const s of sessions) {
+    process.stdout.write(`${pad(s.id.slice(0, 8), 10)} ${pad(s.name, 20)} ${pad(s.status, 8)} ${pad(s.tmuxSession || '-', 15)} ${pad(s.type, 8)}\n`);
+  }
+}
+
+async function cmdAttach(query) {
+  const session = await findSession(query);
+  process.stderr.write(`Attaching to ${session.name} (${session.id.slice(0, 8)})\n`);
+  connectSession(session.id);
+}
+
+async function cmdKill(query) {
+  const session = await findSession(query);
+  await apiRequest('DELETE', `/api/sessions/${session.id}`);
+  process.stdout.write(`Killed ${session.name} (${session.id.slice(0, 8)})\n`);
+}
+
+async function cmdKillAll() {
+  const sessions = await apiRequest('GET', '/api/sessions');
+  if (!Array.isArray(sessions) || sessions.length === 0) {
+    process.stdout.write('No sessions to kill\n');
+    return;
+  }
+  for (const s of sessions) {
+    await apiRequest('DELETE', `/api/sessions/${s.id}`);
+    process.stdout.write(`Killed ${s.name} (${s.id.slice(0, 8)})\n`);
+  }
+}
+
+async function cmdCreate(type, cwd, agent, resumeSessionId) {
+  const name = type === 'terminal' ? 'terminal' : `claude:${cwd.split('/').pop()}`;
+  const session = await apiRequest('POST', '/api/sessions', {
+    type, name, cwd, agent, claudeSessionId: resumeSessionId,
+  });
+  if (session.error) {
+    process.stderr.write(`Error: ${session.error}\n`);
+    process.exit(1);
+  }
+  process.stderr.write(`Session ${session.id.slice(0, 8)} created (${type}, tmux=${session.tmuxSession || '-'})\n`);
+  connectSession(session.id);
+}
+
+function showHelp() {
+  process.stdout.write(`cc - claude-control CLI
+
+Usage:
+  cc                        Create claude session in current dir
+  cc claude                 Same as above
+  cc terminal               Create terminal session
+  cc list | ls              List all sessions
+  cc attach <id|name>       Attach to existing session
+  cc kill <id|name>         Kill a session
+  cc kill-all               Kill all sessions
+
+Options:
+  --cwd <path>              Working directory
+  --agent <preset>          Agent preset (default, reviewer, autonomous)
+  --resume <id>             Resume claude session by ID
+  -h, --help                Show this help
+`);
+}
+
+// --- Main ---
+
+const args = process.argv.slice(2);
+
+if (args.includes('-h') || args.includes('--help')) {
+  showHelp();
+  process.exit(0);
+}
+
+const cmd = args[0];
+
+if (cmd === 'list' || cmd === 'ls') {
+  cmdList().catch(err => { process.stderr.write(`Error: ${err.message}\n`); process.exit(1); });
+} else if (cmd === 'attach' && args[1]) {
+  cmdAttach(args[1]).catch(err => { process.stderr.write(`Error: ${err.message}\n`); process.exit(1); });
+} else if (cmd === 'kill' && args[1]) {
+  cmdKill(args[1]).catch(err => { process.stderr.write(`Error: ${err.message}\n`); process.exit(1); });
+} else if (cmd === 'kill-all') {
+  cmdKillAll().catch(err => { process.stderr.write(`Error: ${err.message}\n`); process.exit(1); });
+} else {
+  // Create session
+  let type = 'claude';
+  let cwd = process.cwd();
+  let agent = undefined;
+  let resumeSessionId = undefined;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--cwd' && args[i + 1]) { cwd = resolve(args[++i]); continue; }
+    if (args[i] === '--resume' && args[i + 1]) { resumeSessionId = args[++i]; continue; }
+    if (args[i] === '--agent' && args[i + 1]) { agent = args[++i]; continue; }
+    if (args[i] === 'terminal' || args[i] === 'claude') { type = args[i]; continue; }
+  }
+
+  cmdCreate(type, cwd, agent, resumeSessionId).catch(err => {
+    process.stderr.write(`Error: ${err.message}\n`);
+    process.exit(1);
+  });
+}
