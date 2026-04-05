@@ -39,6 +39,7 @@ interface Store {
   setFocused: (id: string | null) => void;
   sendInput: (sessionId: string, data: string) => void;
   sendResize: (sessionId: string, cols: number, rows: number) => void;
+  killSession: (sessionId: string) => void;
   clearPermission: (sessionId: string) => void;
 
   // data handler for xterm - registered per session
@@ -203,6 +204,14 @@ export const useStore = create<Store>((set, get) => ({
     const { ws } = get();
     if (!ws) return;
     ws.send(JSON.stringify({ type: 'resize', sessionId, cols, rows }));
+  },
+
+  killSession: (sessionId) => {
+    const { token } = get();
+    fetch(`/api/sessions/${sessionId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` },
+    }).catch(() => {});
   },
 
   clearPermission: (sessionId) => {

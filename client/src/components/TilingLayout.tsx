@@ -2,12 +2,15 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useStore } from '../store';
 import TerminalTile from './TerminalTile';
 import DetectedTile from './DetectedTile';
+import SpiralLayout from './SpiralLayout';
 
 const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
 export default function TilingLayout() {
   const sessions = useStore(s => s.sessions);
   const focusedSessionId = useStore(s => s.focusedSessionId);
+  const setFocused = useStore(s => s.setFocused);
+  const permissions = useStore(s => s.permissions);
   const subscribeSession = useStore(s => s.subscribeSession);
   const subscribedIds = useStore(s => s.subscribedIds);
   const sendInput = useStore(s => s.sendInput);
@@ -17,18 +20,6 @@ export default function TilingLayout() {
   const [newCwd, setNewCwd] = useState('~');
   const [detected, setDetected] = useState<Array<{ pid: number; cwd: string; sessionId?: string }>>([]);
   const recognitionRef = useRef<any>(null);
-  const [isLandscape, setIsLandscape] = useState(window.innerWidth > window.innerHeight);
-
-  // detect orientation changes
-  useEffect(() => {
-    const update = () => setIsLandscape(window.innerWidth > window.innerHeight);
-    window.addEventListener('resize', update);
-    window.addEventListener('orientationchange', update);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('orientationchange', update);
-    };
-  }, []);
 
   // auto-subscribe to every session as it appears
   useEffect(() => {
@@ -144,27 +135,78 @@ export default function TilingLayout() {
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      {/* top bar */}
+      {/* session tabs + controls */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        padding: '4px 10px',
         borderBottom: '1px solid #222',
         flexShrink: 0,
-        gap: 8,
+        overflow: 'hidden',
       }}>
-        <span style={{ fontSize: 12, color: '#555', flex: 1 }}>
-          {visibleSessions.length}/{sessions.length}
-        </span>
+        {/* tabs - scrollable */}
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          overflow: 'auto',
+          minWidth: 0,
+        }}>
+          {/* "all" tab */}
+          <div
+            onClick={() => setFocused(null)}
+            style={{
+              padding: '6px 10px',
+              fontSize: 11,
+              cursor: 'pointer',
+              borderRight: '1px solid #222',
+              background: !focusedSessionId ? '#111' : 'transparent',
+              color: !focusedSessionId ? '#fff' : '#555',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+            }}
+          >
+            all ({sessions.length})
+          </div>
+          {sessions.map(s => {
+            const active = focusedSessionId === s.id;
+            const hasPerm = !!permissions[s.id];
+            return (
+              <div
+                key={s.id}
+                onClick={() => setFocused(active ? null : s.id)}
+                style={{
+                  padding: '6px 10px',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  borderRight: '1px solid #222',
+                  background: active ? '#111' : 'transparent',
+                  color: active ? '#fff' : hasPerm ? '#ff3b30' : '#666',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <div style={{
+                  width: 5, height: 5, borderRadius: '50%',
+                  background: s.status === 'running' ? '#30d158' : '#444',
+                }} />
+                {s.name}
+                {hasPerm && <span style={{ color: '#ff3b30', animation: 'pulse 1.5s infinite' }}>!</span>}
+              </div>
+            );
+          })}
+        </div>
+        {/* controls */}
         <button
           onClick={() => setShowNewMenu(!showNewMenu)}
-          style={{ border: 'none', fontSize: 16, padding: '2px 8px', color: '#fff' }}
+          style={{ border: 'none', borderLeft: '1px solid #222', fontSize: 16, padding: '4px 10px', color: '#fff', flexShrink: 0 }}
         >
           +
         </button>
         <button
           onClick={toggleVoice}
-          style={{ border: 'none', fontSize: 14, padding: '2px 6px', color: listening ? '#ff3b30' : '#555' }}
+          style={{ border: 'none', borderLeft: '1px solid #222', fontSize: 13, padding: '4px 8px', color: listening ? '#ff3b30' : '#555', flexShrink: 0 }}
         >
           mic
         </button>
@@ -206,22 +248,18 @@ export default function TilingLayout() {
         </div>
       )}
 
-      {/* tiling area - managed sessions take all space */}
+      {/* tiling area - spiral layout */}
       {visibleSessions.length === 0 ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#444' }}>
           no active sessions -- tap + to create
         </div>
       ) : (
-        <div style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: isLandscape ? 'row' : 'column',
-          minHeight: 0,
-          minWidth: 0,
-        }}>
-          {visibleSessions.map(s => (
-            <TerminalTile key={s.id} sessionId={s.id} isFocused={focusedSessionId === s.id} />
-          ))}
+        <div style={{ flex: 1, display: 'flex', minHeight: 0, minWidth: 0 }}>
+          <SpiralLayout
+            items={visibleSessions.map(s => (
+              <TerminalTile key={s.id} sessionId={s.id} isFocused={focusedSessionId === s.id} />
+            ))}
+          />
         </div>
       )}
 

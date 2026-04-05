@@ -15,6 +15,7 @@ export default function TerminalTile({ sessionId, isFocused }: Props) {
   const sendInput = useStore(s => s.sendInput);
   const sendResize = useStore(s => s.sendResize);
   const clearPermission = useStore(s => s.clearPermission);
+  const killSession = useStore(s => s.killSession);
   const setFocused = useStore(s => s.setFocused);
   const onSessionData = useStore(s => s.onSessionData);
   const onSessionScrollback = useStore(s => s.onSessionScrollback);
@@ -46,7 +47,11 @@ export default function TerminalTile({ sessionId, isFocused }: Props) {
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(termRef.current);
-    requestAnimationFrame(() => fit.fit());
+    // Fit and send correct size to PTY immediately
+    requestAnimationFrame(() => {
+      fit.fit();
+      sendResize(sessionId, term.cols, term.rows);
+    });
 
     terminalRef.current = term;
     fitRef.current = fit;
@@ -138,6 +143,12 @@ export default function TerminalTile({ sessionId, isFocused }: Props) {
         )}
         <span style={{ fontSize: 10, color: '#444' }}>
           {isFocused ? '[-]' : '[+]'}
+        </span>
+        <span
+          onClick={(e) => { e.stopPropagation(); killSession(sessionId); }}
+          style={{ fontSize: 10, color: '#ff3b30', cursor: 'pointer', padding: '0 2px' }}
+        >
+          x
         </span>
       </div>
 

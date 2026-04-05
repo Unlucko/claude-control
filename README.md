@@ -1,8 +1,10 @@
-# claude-control
+<p align="center">
+  <img src="assets/logo.png" alt="claude-control" width="400" />
+</p>
 
-Mobile-first remote control for Claude Code sessions via HTTPS + WebSocket with real PTY.
+<h1 align="center">claude-control</h1>
 
-<!-- screenshot -->
+<p align="center">Mobile-first remote control for Claude Code sessions via HTTPS + WebSocket with real PTY.</p>
 
 ## Features
 

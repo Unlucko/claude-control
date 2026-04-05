@@ -82,8 +82,8 @@ export function launchClaude(opts: LaunchOptions & {
   }
 
   const tmuxName = `cc-${randomUUID().slice(0, 8)}`;
-  const cols = opts.cols ?? 220;
-  const rows = opts.rows ?? 50;
+  const cols = opts.cols ?? 80;
+  const rows = opts.rows ?? 24;
 
   // Build the full claude command, quoting args that contain spaces
   const claudeCmd = [bin, ...claudeArgs].map(a => a.includes(' ') ? `"${a}"` : a).join(' ');
@@ -115,8 +115,8 @@ export function launchClaude(opts: LaunchOptions & {
 export function launchTerminal(opts: LaunchOptions & { name?: string }): SpawnSpec {
   const cwd = resolveCwd(opts.cwd);
   const tmuxName = `cc-${randomUUID().slice(0, 8)}`;
-  const cols = opts.cols ?? 220;
-  const rows = opts.rows ?? 50;
+  const cols = opts.cols ?? 80;
+  const rows = opts.rows ?? 24;
   const tmux = tmuxBin();
 
   execSync(`${tmux} new-session -d -s ${tmuxName} -x ${cols} -y ${rows} -c ${JSON.stringify(cwd)} /bin/zsh`, {
