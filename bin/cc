@@ -1,0 +1,151 @@
+#!/usr/bin/env node
+
+// cc — CLI client for claude-control
+// Creates a session and connects your terminal to it via WebSocket.
+// Usage: cc [claude|terminal] [--cwd <path>] [--resume <id>] [--agent <preset>]
+
+const https = require('https');
+const { WebSocket } = require('ws');
+const { resolve } = require('path');
+const os = require('os');
+
+// Config
+const TOKEN = process.env.CC_TOKEN || process.env.CONTROL_TOKEN;
+const HOST = process.env.CC_HOST || 'localhost';
+const PORT = process.env.CC_PORT || '4000';
+const BASE = `https://${HOST}:${PORT}`;
+const WS_URL = `wss://${HOST}:${PORT}/ws?token=${TOKEN}`;
+
+if (!TOKEN) {
+  process.stderr.write('Error: set CC_TOKEN or CONTROL_TOKEN env var\n');
+  process.exit(1);
+}
+
+// Parse args
+const args = process.argv.slice(2);
+let type = 'claude';
+let cwd = process.cwd();
+let resumeSessionId = undefined;
+let agent = undefined;
+
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--cwd' && args[i + 1]) { cwd = resolve(args[++i]); continue; }
+  if (args[i] === '--resume' && args[i + 1]) { resumeSessionId = args[++i]; continue; }
+  if (args[i] === '--agent' && args[i + 1]) { agent = args[++i]; continue; }
+  if (args[i] === 'terminal' || args[i] === 'claude') { type = args[i]; continue; }
+}
+
+// Ignore self-signed certs
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+function apiRequest(method, path, body) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(path, BASE);
+    const opts = {
+      method,
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname,
+      headers: {
+        'Authorization': `Bearer ${TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      rejectAuthorized: false,
+    };
+    const req = https.request(opts, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); } catch { resolve(data); }
+      });
+    });
+    req.on('error', reject);
+    if (body) req.write(JSON.stringify(body));
+    req.end();
+  });
+}
+
+async function main() {
+  // Create session
+  const session = await apiRequest('POST', '/api/sessions', {
+    type,
+    name: type === 'terminal' ? 'terminal' : `claude:${cwd.split('/').pop()}`,
+    cwd,
+    agent,
+    claudeSessionId: resumeSessionId,
+  });
+
+  if (session.error) {
+    process.stderr.write(`Error: ${session.error}\n`);
+    process.exit(1);
+  }
+
+  process.stderr.write(`Session ${session.id} created (${type}, pid ${session.pid})\n`);
+
+  // Connect WebSocket
+  const ws = new WebSocket(WS_URL, { rejectUnauthorized: false });
+
+  ws.on('open', () => {
+    // Subscribe to session
+    ws.send(JSON.stringify({ type: 'subscribe', sessionId: session.id }));
+
+    // Send terminal size
+    const { columns: cols, rows } = process.stdout;
+    ws.send(JSON.stringify({ type: 'resize', sessionId: session.id, cols, rows }));
+
+    // Raw mode - pass stdin directly to PTY
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+    }
+    process.stdin.resume();
+    process.stdin.on('data', (data) => {
+      ws.send(JSON.stringify({ type: 'input', sessionId: session.id, data: data.toString() }));
+    });
+
+    // Handle terminal resize
+    process.stdout.on('resize', () => {
+      const { columns: cols, rows } = process.stdout;
+      ws.send(JSON.stringify({ type: 'resize', sessionId: session.id, cols, rows }));
+    });
+  });
+
+  ws.on('message', (raw) => {
+    const msg = JSON.parse(raw.toString());
+    switch (msg.type) {
+      case 'data':
+      case 'scrollback':
+        if (msg.sessionId === session.id) {
+          process.stdout.write(msg.data);
+        }
+        break;
+      case 'session_exit':
+        if (msg.sessionId === session.id) {
+          cleanup();
+        }
+        break;
+    }
+  });
+
+  ws.on('close', () => cleanup());
+  ws.on('error', (err) => {
+    process.stderr.write(`WS error: ${err.message}\n`);
+    cleanup();
+  });
+
+  function cleanup() {
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+    }
+    process.exit(0);
+  }
+
+  // Ctrl+C should go to the remote PTY, not kill this process
+  // Raw mode handles this, but just in case:
+  process.on('SIGINT', () => {});
+  process.on('SIGTERM', () => cleanup());
+}
+
+main().catch((err) => {
+  process.stderr.write(`Error: ${err.message}\n`);
+  process.exit(1);
+});

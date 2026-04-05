@@ -1,6 +1,7 @@
 import * as pty from 'node-pty';
 import WebSocket from 'ws';
 import { randomUUID } from 'crypto';
+import { execSync } from 'child_process';
 import type {
   SessionMeta,
   SessionState,
@@ -55,6 +56,7 @@ export function createSession(opts: {
   type: SessionType;
   agent?: string;
   claudeSessionId?: string;
+  tmuxSession?: string;
 }): SessionMeta {
   const id = randomUUID();
   const cols = opts.cols ?? 220;
@@ -82,6 +84,7 @@ export function createSession(opts: {
     pid: proc.pid,
     status: 'running',
     claudeSessionId: opts.claudeSessionId,
+    tmuxSession: opts.tmuxSession,
     createdAt: Date.now(),
   };
 
@@ -140,6 +143,9 @@ export function resizeSession(id: string, cols: number, rows: number): boolean {
 export function killSession(id: string): boolean {
   const state = sessions.get(id);
   if (!state) return false;
+  if (state.meta.tmuxSession) {
+    try { execSync('tmux kill-session -t ' + state.meta.tmuxSession); } catch {}
+  }
   try {
     state.pty.kill();
   } catch {

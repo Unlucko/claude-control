@@ -91,17 +91,25 @@ export const useStore = create<Store>((set, get) => ({
           set({ sessions: msg.sessions });
           break;
 
-        case 'session_created':
-          set({ sessions: [...state.sessions, msg.session] });
+        case 'session_created': {
+          const exists = state.sessions.some(s => s.id === msg.session.id);
+          if (!exists) {
+            set({ sessions: [...state.sessions, msg.session] });
+          }
           break;
+        }
 
         case 'session_deleted': {
           const newSub = new Set(state.subscribedIds);
           newSub.delete(msg.sessionId);
+          const { [msg.sessionId]: _p, ...restPermissions } = state.permissions;
+          const { [msg.sessionId]: _b, ...restBuffers } = state._recentBuffers;
           set({
             sessions: state.sessions.filter(s => s.id !== msg.sessionId),
             subscribedIds: newSub,
             focusedSessionId: state.focusedSessionId === msg.sessionId ? null : state.focusedSessionId,
+            permissions: restPermissions,
+            _recentBuffers: restBuffers,
           });
           break;
         }

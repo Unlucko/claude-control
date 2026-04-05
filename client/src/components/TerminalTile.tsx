@@ -55,12 +55,22 @@ export default function TerminalTile({ sessionId, isFocused }: Props) {
       sendInput(sessionId, data);
     });
 
+    // Filter tmux DA responses and other escape noise
+    const clean = (d: string) => d
+      .replace(/\x1b\[\?[0-9;]*c/g, '')   // ESC[?...c DA response
+      .replace(/\x1b\[>[0-9;]*c/g, '')    // ESC[>...c secondary DA
+      .replace(/\x1b P[^\x1b]*\x1b\\/g, '') // DCS sequences
+      .replace(/[0-9]+;[0-9]+;[0-9]+c/g, '') // leaked DA fragments like 1;2c0;276;0c
+      ;
+
     const unsubData = onSessionData(sessionId, (data) => {
-      term.write(data);
+      const filtered = clean(data);
+      if (filtered) term.write(filtered);
     });
 
     const unsubScrollback = onSessionScrollback(sessionId, (data) => {
-      term.write(data);
+      const filtered = clean(data);
+      if (filtered) term.write(filtered);
     });
 
     const ro = new ResizeObserver(() => {
@@ -94,6 +104,7 @@ export default function TerminalTile({ sessionId, isFocused }: Props) {
       flexDirection: 'column',
       flex: 1,
       minHeight: 0,
+      minWidth: 0,
       border: '1px solid #222',
       overflow: 'hidden',
     }}>

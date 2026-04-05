@@ -16,6 +16,7 @@ export interface SessionMeta {
   pid: number;
   status: SessionStatus;
   claudeSessionId?: string;
+  tmuxSession?: string;
   createdAt: number;
 }
 
@@ -34,6 +35,7 @@ export interface CreateSessionBody {
   agent?: string;
   cwd?: string;
   claudeSessionId?: string;
+  tmuxSession?: string;
 }
 
 export interface InputBody {

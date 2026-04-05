@@ -102,9 +102,11 @@ router.get('/agents', (_req, res) => {
   res.json(launcher.getAgentPresets());
 });
 
-// GET /api/system-sessions
+// GET /api/system-sessions — claude processes NOT managed by claude-control
 router.get('/system-sessions', (_req, res) => {
-  res.json(scanClaudeProcesses());
+  const managed = new Set(sm.listSessions().map(s => s.pid));
+  const system = scanClaudeProcesses().filter(p => !managed.has(p.pid));
+  res.json(system);
 });
 
 // ─── Health ───────────────────────────────────────────────────────────────────
