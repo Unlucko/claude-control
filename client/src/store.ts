@@ -22,6 +22,7 @@ interface Store {
   sessions: SessionMeta[];
   subscribedIds: Set<string>;
   focusedSessionId: string | null; // null = tiling view, string = fullscreen one
+  activeSessionId: string | null; // which session has cursor/input focus
 
   // permissions - per session
   permissions: Record<string, PermissionRequest | null>;
@@ -37,6 +38,7 @@ interface Store {
   unsubscribeSession: (id: string) => void;
   subscribeAll: () => void;
   setFocused: (id: string | null) => void;
+  setActive: (id: string | null) => void;
   sendInput: (sessionId: string, data: string) => void;
   sendResize: (sessionId: string, cols: number, rows: number) => void;
   killSession: (sessionId: string) => void;
@@ -63,6 +65,7 @@ export const useStore = create<Store>((set, get) => ({
   sessions: [],
   subscribedIds: new Set(),
   focusedSessionId: null,
+  activeSessionId: null,
   permissions: {},
   _recentBuffers: {},
   _dataListeners: {},
@@ -192,6 +195,10 @@ export const useStore = create<Store>((set, get) => ({
 
   setFocused: (id) => {
     set({ focusedSessionId: id });
+  },
+
+  setActive: (id) => {
+    set({ activeSessionId: id });
   },
 
   sendInput: (sessionId, data) => {

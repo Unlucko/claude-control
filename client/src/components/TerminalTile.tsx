@@ -17,6 +17,9 @@ export default function TerminalTile({ sessionId, isFocused }: Props) {
   const clearPermission = useStore(s => s.clearPermission);
   const killSession = useStore(s => s.killSession);
   const setFocused = useStore(s => s.setFocused);
+  const setActive = useStore(s => s.setActive);
+  const activeSessionId = useStore(s => s.activeSessionId);
+  const isActive = activeSessionId === sessionId;
   const onSessionData = useStore(s => s.onSessionData);
   const onSessionScrollback = useStore(s => s.onSessionScrollback);
 
@@ -110,9 +113,12 @@ export default function TerminalTile({ sessionId, isFocused }: Props) {
       flex: 1,
       minHeight: 0,
       minWidth: 0,
-      border: '1px solid #222',
+      border: isActive ? '1px solid #f0a030' : '1px solid #222',
       overflow: 'hidden',
-    }}>
+    }}
+      onMouseDown={() => setActive(sessionId)}
+      onTouchStart={() => setActive(sessionId)}
+    >
       {/* tile header */}
       <div
         onClick={() => setFocused(isFocused ? null : sessionId)}
@@ -181,6 +187,44 @@ export default function TerminalTile({ sessionId, isFocused }: Props) {
 
       {/* terminal */}
       <div ref={termRef} style={{ flex: 1, overflow: 'hidden' }} />
+
+      {/* quick action buttons */}
+      {isActive && (
+        <div style={{
+          display: 'flex',
+          borderTop: '1px solid #222',
+          flexShrink: 0,
+          overflow: 'auto',
+        }}>
+          {[
+            { label: 'y', value: 'y\n' },
+            { label: 'n', value: 'n\n' },
+            { label: '1', value: '1\n' },
+            { label: '2', value: '2\n' },
+            { label: '3', value: '3\n' },
+            { label: 'Enter', value: '\r' },
+            { label: 'Esc', value: '\x1b' },
+            { label: 'Tab', value: '\t' },
+            { label: 'Ctrl+C', value: '\x03' },
+          ].map(btn => (
+            <button
+              key={btn.label}
+              onClick={(e) => { e.stopPropagation(); sendInput(sessionId, btn.value); }}
+              style={{
+                flex: 1,
+                border: 'none',
+                borderRight: '1px solid #222',
+                fontSize: 10,
+                padding: '6px 0',
+                color: '#888',
+                minWidth: 0,
+              }}
+            >
+              {btn.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <style>{`
         @keyframes pulse {

@@ -11,6 +11,7 @@ export default function TilingLayout() {
   const focusedSessionId = useStore(s => s.focusedSessionId);
   const setFocused = useStore(s => s.setFocused);
   const permissions = useStore(s => s.permissions);
+  const activeSessionId = useStore(s => s.activeSessionId);
   const subscribeSession = useStore(s => s.subscribeSession);
   const subscribedIds = useStore(s => s.subscribedIds);
   const sendInput = useStore(s => s.sendInput);
@@ -167,19 +168,21 @@ export default function TilingLayout() {
             all ({sessions.length})
           </div>
           {sessions.map(s => {
-            const active = focusedSessionId === s.id;
+            const focused = focusedSessionId === s.id;
+            const isActive = activeSessionId === s.id;
             const hasPerm = !!permissions[s.id];
             return (
               <div
                 key={s.id}
-                onClick={() => setFocused(active ? null : s.id)}
+                onClick={() => setFocused(focused ? null : s.id)}
                 style={{
                   padding: '6px 10px',
                   fontSize: 11,
                   cursor: 'pointer',
                   borderRight: '1px solid #222',
-                  background: active ? '#111' : 'transparent',
-                  color: active ? '#fff' : hasPerm ? '#ff3b30' : '#666',
+                  borderBottom: isActive ? '2px solid #f0a030' : '2px solid transparent',
+                  background: focused ? '#111' : 'transparent',
+                  color: focused ? '#fff' : isActive ? '#f0a030' : hasPerm ? '#ff3b30' : '#666',
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
                   display: 'flex',
