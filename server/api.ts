@@ -2,6 +2,7 @@ import { Router } from 'express';
 import * as sm from './session-manager';
 import * as launcher from './process-launcher';
 import { scanClaudeProcesses } from './system-scanner';
+import { addSubscription, getVapidPublicKey } from './push-manager';
 import type { CreateSessionBody, InputBody, ResizeBody } from './types';
 
 const router = Router();
@@ -107,6 +108,23 @@ router.get('/system-sessions', (_req, res) => {
   const managed = new Set(sm.listSessions().map(s => s.pid));
   const system = scanClaudeProcesses().filter(p => !managed.has(p.pid));
   res.json(system);
+});
+
+// ─── Push notifications ──────────────────────────────────────────────────────
+
+// GET /api/push/vapid-key
+router.get('/push/vapid-key', (_req, res) => {
+  res.json({ publicKey: getVapidPublicKey() });
+});
+
+// POST /api/push/subscribe
+router.post('/push/subscribe', (req, res) => {
+  const subscription = req.body;
+  if (!subscription?.endpoint) {
+    return res.status(400).json({ error: 'Invalid subscription' });
+  }
+  addSubscription(subscription);
+  res.status(201).json({ ok: true });
 });
 
 // ─── Health ───────────────────────────────────────────────────────────────────

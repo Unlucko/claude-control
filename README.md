@@ -6,6 +6,11 @@
 
 <p align="center">Mobile-first remote control for Claude Code sessions via HTTPS + WebSocket with real PTY.</p>
 
+<p align="center">
+  <img src="assets/screenshot-single.png" alt="Single session" width="48%" />
+  <img src="assets/screenshot-tiling.png" alt="Tiling layout" width="48%" />
+</p>
+
 ## Features
 
 - **Tiling window manager** - View multiple sessions side by side, tap any tile to expand fullscreen, tap again to collapse back to grid

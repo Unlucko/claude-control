@@ -8,8 +8,12 @@ import type {
   SessionType,
   WsServerMessage,
 } from './types';
+import { sendPermissionNotification } from './push-manager';
 
 const SCROLLBACK_LIMIT = 10_000;
+const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07/g;
+const ALLOW_RE = /(?:allow|approve|permit|\[Y\/n|y\/n|\(Y\)es)/i;
+const TOOL_RE = /(?:Bash|Read|Write|Edit|Glob|Grep|WebFetch|WebSearch|Agent|Skill)/i;
 
 // ─── Store ───────────────────────────────────────────────────────────────────
 
@@ -97,6 +101,9 @@ export function createSession(opts: {
 
   sessions.set(id, state);
 
+  let recentBuffer = '';
+  let lastNotified = 0;
+
   proc.onData((data) => {
     // Append to scrollback (simple line-based cap)
     state.scrollback.push(data);
@@ -104,6 +111,18 @@ export function createSession(opts: {
       state.scrollback.splice(0, state.scrollback.length - SCROLLBACK_LIMIT);
     }
     broadcast(state.subscribers, { type: 'data', sessionId: id, data });
+
+    // Server-side permission detection for push notifications
+    recentBuffer = (recentBuffer + data).slice(-2000);
+    const clean = recentBuffer.replace(ANSI_RE, '');
+    const now = Date.now();
+    if (ALLOW_RE.test(clean) && TOOL_RE.test(clean) && now - lastNotified > 10_000) {
+      const toolMatch = clean.match(TOOL_RE);
+      if (toolMatch) {
+        lastNotified = now;
+        sendPermissionNotification(meta.name, toolMatch[0], id);
+      }
+    }
   });
 
   proc.onExit(({ exitCode }) => {
