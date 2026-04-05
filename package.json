@@ -1,0 +1,29 @@
+{
+  "name": "claude-control",
+  "version": "1.0.0",
+  "description": "Remote Claude Code control server — PTY sessions over WebSocket",
+  "main": "dist/server/index.js",
+  "scripts": {
+    "dev": "nodemon --watch server --ext ts --exec ts-node server/index.ts",
+    "build": "tsc",
+    "start": "node dist/server/index.js",
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null || true",
+    "build:client": "cd client && npm run build",
+    "gen-certs": "mkdir -p certs && cd certs && mkcert localhost 127.0.0.1 $(ipconfig getifaddr en0 2>/dev/null || echo 192.168.0.1)"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "node-pty": "^1.1.0",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.5.0",
+    "@types/ws": "^8.18.1",
+    "nodemon": "^3.1.14",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.2"
+  }
+}
