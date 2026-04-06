@@ -21,7 +21,7 @@
 - **System process scanner** - Detects already-running `claude` processes on the host so you can attach to them
 - **Agent presets** - Pre-configured launch profiles (default, reviewer, db-analyst, autonomous)
 - **Cloudflare Tunnel** - Access your sessions from anywhere, not just your LAN
-- **Self-signed TLS via mkcert** - HTTPS is required for WebSocket on iOS Safari and PWA installation
+- **Self-signed TLS via mkcert** - HTTPS required for WebSocket on mobile browsers and PWA installation
 
 ## Architecture
 
@@ -62,6 +62,20 @@ iPhone/Browser (PWA)
 
 **Client stack:** React 19 + Zustand + Xterm.js + Vite
 
+## Requirements
+
+- **Node.js** 18+ and npm
+- **tmux** (required for session multiplexing)
+- **mkcert** (for TLS certificates)
+
+| | macOS | Linux (Debian/Ubuntu) | Windows |
+|---|---|---|---|
+| tmux | `brew install tmux` | `sudo apt install tmux` | WSL required (`apt install tmux`) |
+| mkcert | `brew install mkcert` | [Download binary](https://github.com/FiloSottile/mkcert/releases) or `sudo apt install mkcert` | [Download binary](https://github.com/FiloSottile/mkcert/releases) |
+| node-pty | Works natively | `sudo apt install build-essential python3` | Works under WSL |
+
+> **Windows note:** node-pty and tmux require a Unix environment. Use WSL 2 (Windows Subsystem for Linux) - everything works inside a WSL terminal.
+
 ## Quick Start
 
 ### 1. Install dependencies
@@ -74,7 +88,6 @@ cd client && npm install && cd ..
 ### 2. Generate TLS certificates
 
 ```bash
-# requires mkcert: brew install mkcert
 npm run gen-certs
 ```
 
@@ -116,22 +129,32 @@ Server runs at `https://localhost:4000`.
 
 ### LAN Access
 
-1. Find your Mac's IP: `ipconfig getifaddr en0`
+1. Find your machine's LAN IP:
+   - **macOS:** `ipconfig getifaddr en0`
+   - **Linux:** `hostname -I | awk '{print $1}'`
+   - **WSL:** use the Windows host IP (`ipconfig` in PowerShell, look for IPv4)
 2. Open `https://<your-ip>:4000` on your phone
 3. Enter your `CONTROL_TOKEN` when prompted
 
-### Trust the certificate (iOS)
+### Trust the certificate
 
-To avoid "Not Secure" warnings:
+To avoid "Not Secure" warnings, install the mkcert root CA on your phone:
 
-1. Install the mkcert root CA: `mkcert -install`
-2. Send `~/.local/share/mkcert/rootCA.pem` to your phone (AirDrop works)
-3. On iOS: Settings > General > VPN & Device Management > Install the profile
-4. Settings > General > About > Certificate Trust Settings > Enable full trust
+1. Run `mkcert -install` on your machine
+2. Send the root CA to your phone:
+   - **macOS:** `~/.local/share/mkcert/rootCA.pem` (AirDrop, email, etc.)
+   - **Linux:** `~/.local/share/mkcert/rootCA.pem` (email, USB, QR code, etc.)
+
+**iOS:** Settings > General > VPN & Device Management > Install profile > then Settings > General > About > Certificate Trust Settings > Enable full trust
+
+**Android:** Settings > Security > Encryption & credentials > Install a certificate > CA certificate > select the file
 
 ### Install as PWA
 
-In Safari, tap Share > Add to Home Screen. The app launches fullscreen without browser chrome.
+- **iOS (Safari):** Share > Add to Home Screen
+- **Android (Chrome):** Menu (three dots) > Add to Home Screen
+
+The app launches fullscreen without browser chrome.
 
 ## Remote Access via Cloudflare Tunnel
 
@@ -287,7 +310,7 @@ claude-control/
 Claude Code detects whether it is connected to a real TTY. Without a PTY, interactive mode does not work.
 
 **Why mkcert?**
-HTTPS is mandatory for: secure WebSocket on iOS Safari, PWA Add to Home Screen, and the Clipboard API.
+HTTPS is mandatory for: secure WebSocket on mobile browsers, PWA Add to Home Screen, and the Clipboard API.
 
 **Scrollback buffer:**
 Ring buffer of up to 10,000 output chunks per session. When you subscribe to a session, the server replays the full buffer so you can see history.
